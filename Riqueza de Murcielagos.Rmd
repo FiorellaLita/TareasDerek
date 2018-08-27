@@ -1,0 +1,176 @@
+---
+title: "Riqueza de Murcielagos en Areas Protegidas de España"
+author: "Fiorella Gonzales"
+date: "26 de agosto de 2018"
+output: 
+    html_document:
+    fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+## Introduccion:
+
+Los murciélagos son los únicos mamíferos que han desarrollado la capacidad de volar y se encuentran 
+prácticamente en todo el mundo, con excepción de las grandes altitudes. A pesar de ser especies poco atractivas para el público en general, los científicos continuamente están describiendo nuevas especies, características de vuelo y ecolocalización, así como su rol ecosistémico principalmente enfocado al control de plagas y la polinización. Este grupo de mamíferos se ha originado hace casi 65 millones de años, estableciéndose como el segundo grupo de mamíferos continentales más diverso (con aproximadamente 1150 especies), siguiendo a los roedores. En España se han registrado 33 especies.
+Las Areas Protegidas aparecieron en los años 80, como una respuesta a la perdida de la biodiversidad a 
+la que nos veniamos enfrentando. Son areas de territorio, que estan destinadas a la preservacion de la biodiversidad, asi como de los servicios ecosistemicos, ademas muchas veces en su manejo, se incluye el uso sostenible de los recursos naturales, todo esto con el fin de que puedan ser preservadas para las generaciones futuras.
+España cuenta con 1.905 espacios naturales protegidos: 15 parques nacionales, 149 parques naturales, 291 reservas naturales, 328 monumentos naturales, 53 paisajes protegidos y 1 área marina protegida.
+
+## Objetivo
+El objetivo de este trabajo es analizar la representativida de las  especies de murcielagos en las Areas Protegidas de España. 
+
+## Resultados esperados
+Nosotros hipotetizamos que la riqueza de especies de murcielagos disminuya hacia latitudes altas, además que el área del  Area Protegida tenga influencia en la riqueza de especies, a mayor area, mayor riqueza de especies contenida.
+
+```{r}
+library(readr)
+library(tidyverse)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+
+#coloco un nombre a mi trabajo y abro el archivo
+parques <-read_csv("parks.csv")
+
+especies1 <-read_csv("species.csv")
+
+# con esto veo los nombres de las columnas
+#Aqui le cambie el a una columna
+colnames(parques)[4]<-"Area"
+colnames(especies1)
+
+#quiero quitar a lo de especies Species ID, Common Names, Seasonality, y X14
+colnames(especies1) <- make.names(colnames(especies1))
+colnames(parques)<-make.names(colnames(parques))
+
+
+# especies1 <-replace(especies1, especies1$Conservation.Status, "" =="Least Concert")
+
+especies1$Conservation.Status <- ifelse(is.na(especies1$Conservation.Status),"Least Concern", especies1$Conservation.Status)
+
+especies1$Abundance<-ifelse(is.na(especies1$Abundance), "No dates", especies1$Abundance)
+
+ESPE1 <-especies1 %>% select(-"Species.ID",-"Record.Status", -"Common.Names", -"Seasonality",-"Nativeness", -"X14", -"Occurrence")
+
+#La base de datos ESPECIES YA ESTA ARREGLADA
+
+#quiero quitar a los parques Park Code
+PARQUES <-parques %>% select(-"Park.Code")
+
+#Junto ambas tablas por Park Name, TENGO LOS PARQUES Y LAS ESPECIES 
+ALL <-PARQUES %>% full_join(ESPE1, "Park.Name")
+ 
+#como se cuanta riqueza hay en cada Parque? pero primero elijo los mamiferos
+ALL1<- ALL %>%  filter(Category== "Mammal") %>% group_by(State)
+
+#a?ado una columna para que me de un valor de riqueza
+
+ALL2 <- mutate(ALL1, Riqueza = "1")
+
+# solo mamiferos terrestres 
+ALL2$Order <- ifelse(is.na(ALL2$Order),"ninguno", ALL2$Order)
+
+MURCI=ALL2 %>% select(Area, Latitude, Longitude, Park.Name, Order, Scientific.Name, Abundance, Conservation.Status, State,  Riqueza) %>% filter (Order == "Chiroptera")
+
+# SI QUIERO QUITAR ALGO, DEBO USAR != 
+MURCI1<- ALL2 %>% select(Area, Latitude, Longitude, Park.Name, Order, Scientific.Name, Abundance, Conservation.Status, State,  Riqueza) %>% filter (Order != "Chiroptera")
+kable(MURCI)
+
+#cuantas observaciones tienes si cumple con la Latitud y la Riqueza
+rparque <-MURCI %>% group_by(Latitude) %>% summarise(n=n()) %>% mutate(Riqueza=n)
+
+#Area del parque y la riqueza, 
+aparque <-MURCI %>% group_by (Area) %>% summarise(n=n()) %>% mutate(Riqueza=n)
+
+#Modifico el area del Parque a Log de Area
+aparque1<-aparque %>% mutate(LogArea=log(Area))
+
+#Estado de Conservacion y Riqueza de especies 
+conparque <-MURCI %>% group_by(Conservation.Status) %>% summarise(n=n()) %>% mutate(Riqueza=n)
+
+#ocurrencia de las especies en cada parque
+eparque <-MURCI %>% group_by(Park.Name, Scientific.Name) %>% summarise(n=n()) %>% mutate(Riqueza=n)
+eparque1<-eparque %>% group_by(Park.Name) %>% summarise_all(funs(sum(Riqueza)))
+
+#Estado de conservacion
+conparque <-MURCI %>% group_by(Conservation.Status) %>% summarise(n=n()) %>% mutate(Riqueza=n)
+
+```
+#*Riqueza de especies y Latitud*
+
+```{r}
+#GRAFICO DE RIQUEZA Y Latitud
+ggplot(rparque, aes (x=Riqueza, y=Latitude))+geom_point(aes(size=Riqueza))+theme_classic()
+```
+
+Figura 1. Variacion Latitudinal de la riqueza de especies de murcielagos presentes en las Areas Protegidas de España.
+
+En la Figura 1 y Figura 2 se puede ver que la riqueza de murcielagos es menor tanto hacia latitudes altas como bajas, haciendose mayor hacia latitudes medias.
+Entre los 30° y 50° de latitud la diversidad es mayor.
+
+```{r}
+#Grafico la riqueza de los murcielagos cambia con la latitud
+
+ggplot(rparque, aes(x=Latitude, y=Riqueza)) + geom_point(color="green")+geom_smooth(color="black")+theme_classic(base_size = 11, base_family = "")+theme_gray()
+```
+
+Figura 2. Variacion Latitudinal de la riqueza de especies de murcielagos presentes en las Areas Protegidas de España
+
+#*Riqueza de especies con el tamaño del area*
+```{r}
+
+
+#Grafico del Log del Tamaño del Parque y la Riqueza
+ggplot(aparque1, aes(x=LogArea, y=Riqueza))+geom_point(color="orange")+geom_smooth(color="black")+theme_classic(base_size = 11, base_family = "")+theme_gray()
+
+
+```
+
+Figura 3. Riqueza de especies por Area (LogArea) de las Areas Protegidas.
+
+No existe una clara correlacion entre el tamaño del area del Area Protegida y la riqueza de especies de murcielagos presentes. 
+
+#*Riqueza de especies global*
+```{r}
+#Grafico de la ocurrencia de las especies en cada parque
+ggplot(eparque1, aes(x=Riqueza, y=Park.Name))+geom_point(color="yellow")+theme_classic(base_size = 5, base_family = "")+theme_gray()
+```
+
+Figura 4. Riqueza de esecies por cada Parque Nacional en España.
+
+Como se ve en la Figura 4. Los parques con menor riqueza de especies (tan solo una especie) son Wargel, Lake Clark,Karmal National Park, Hawai Volcanoes, Haleakala, Glacial Bay y Denali National Park. y los Parques con mayor riqueza de especies son  Saguaro National Park y Death Valley National Park.
+
+#*Representatividad de las especies dentro de los Parques Nacionales*
+
+```{r}
+#especies que estan presentes en mas del 50% de las ANP
+eparque2<-eparque %>% group_by(Scientific.Name) %>% summarise_all(funs(sum(Riqueza))) %>% select("Scientific.Name", "Riqueza") %>% filter (Riqueza > 11) %>% mutate(Representatividad=Riqueza)
+
+#Grafico Especies que representadas en mas de 10 ANP en España
+ggplot(eparque2, aes(x=Representatividad, y=Scientific.Name))+geom_point(color="blue")+xlim(8,50)+theme_classic(base_size = 11, base_family = "")+theme_gray()
+```
+
+Figura 5. Especies de murcielagos presentes en mas de 10 Parques Nacionales de España
+
+De las 72 especies de murcielagos presentes en España, tan solo 17 estan protegidas en almenos 10 parques Nacionales. La especie mas representada para su conservacion es *Myotis lucifugus* presente en 42 Parques Nacionales.
+
+#*Estado de conservacion*
+
+En la Figura 6, se puede ver que las especies de murcielagos con categorias de conservacion Amenazado (Threatened) y (Endagered) son las que estan menos representadas en los Parques Nacionales de España. Esto pone en duda, si las Areas Protegidas, en este caso la categoria de Parque Nacional, estan cumpliendo su rol de preservar la biodiversidad de especies. La baja representatividad de especies con categorias de conservacion de Amenaza o En Peligro, puede llevar a la perdida de estas especies en el Tiempo, de no tomarse en cuenta politicas publicas que analicen el verdadero rol y efecto de las Areas Protegidas para la conservacion de la diversidad de fauna, en este caso con enfasis en los murcielagos.
+
+```{r}
+#grafico por el estado de conservacion 
+ggplot(conparque, aes(x=Riqueza, y=Conservation.Status))+geom_point(aes(size=Riqueza))+theme_classic(base_size = 6)+theme_gray()  
+
+```
+
+Figura 6. Numero de especies de murcielagos de acuerdo a su categoria de conservacion.
+
+
+
+
+
